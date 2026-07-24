@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Exoflow × SEB — accès protégé</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='51.6 47.3 205.4 205.4'%3E%3Cpath fill='%23f03' d='M247.07,105.81H127.28l-37.6,17V229.69A102.66,102.66,0,1,1,247.07,105.81Z'/%3E%3Cpath fill='%23f9f9f9' d='M257,150a102.73,102.73,0,0,1-129.76,99V105.81H247.07A102.31,102.31,0,0,1,257,150Z'/%3E%3Cpath fill='%23195edd' d='M127.28,105.81V249a102.27,102.27,0,0,1-37.6-19.34V122.76Z'/%3E%3C/svg%3E">
+<style>
+:root{--ink:#0A0A0A;--red:#FF0033;--blue:#195EDD;--txt:#efeef4;--mut:#a5a2b3}
+*{margin:0;padding:0;box-sizing:border-box}
+body{min-height:100svh;display:flex;align-items:center;justify-content:center;background:radial-gradient(900px 600px at 70% 20%,rgba(25,94,221,.15),transparent 60%),radial-gradient(700px 500px at 20% 85%,rgba(255,0,51,.12),transparent 60%),var(--ink);color:var(--txt);font-family:Inter,-apple-system,sans-serif;padding:20px}
+.card{width:min(430px,100%);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:42px 36px;background:rgba(255,255,255,.03);backdrop-filter:blur(10px);text-align:center}
+.mark{width:60px;height:60px;margin:0 auto 20px;animation:breath 4s ease-in-out infinite}
+@keyframes breath{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+.cob{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:22px;font-family:"Space Mono",monospace;font-size:.72rem;letter-spacing:.1em;color:var(--mut)}
+h1{font-size:1.2rem;font-weight:600;margin-bottom:8px}
+p{font-size:.85rem;color:var(--mut);margin-bottom:26px}
+input{width:100%;padding:14px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(0,0,0,.35);color:#fff;font-family:"Space Mono",monospace;font-size:.95rem;text-align:center;letter-spacing:.14em;text-transform:uppercase;outline:none;transition:border-color .25s}
+input:focus{border-color:var(--blue)}
+button{width:100%;margin-top:14px;padding:14px;border-radius:12px;border:none;background:var(--red);color:#fff;font-weight:600;font-size:.9rem;cursor:pointer;transition:background .25s,transform .2s}
+button:hover{background:#d10029;transform:translateY(-1px)}
+button:disabled{opacity:.55;cursor:wait;transform:none}
+.err{color:#ff5d76;font-size:.8rem;margin-top:14px;min-height:1.2em}
+.hint{margin-top:22px;font-size:.72rem;color:var(--mut)}
+.shake{animation:shake .4s}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}75%{transform:translateX(7px)}}
+@media (prefers-reduced-motion:reduce){.mark,.shake{animation:none}}
+</style></head>
+<body>
+<form class="card" id="f">
+  <svg class="mark" viewBox="51.6 47.3 205.4 205.4" role="img" aria-label="Exoflow"><path fill="#f03" d="M247.07,105.81H127.28l-37.6,17V229.69A102.66,102.66,0,1,1,247.07,105.81Z"/><path fill="#f9f9f9" d="M257,150a102.73,102.73,0,0,1-129.76,99V105.81H247.07A102.31,102.31,0,0,1,257,150Z"/><path fill="#195edd" d="M127.28,105.81V249a102.27,102.27,0,0,1-37.6-19.34V122.76Z"/></svg>
+  <div class="cob">EXOFLOW &times; GROUPE SEB</div>
+  <h1>Proposition — encarts pilotés par IA</h1>
+  <p>Document chiffré (AES-256-GCM). Saisissez la clé d'accès qui vous a été transmise.</p>
+  <input id="k" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX" aria-label="Clé d'accès">
+  <button id="b" type="submit">Déverrouiller</button>
+  <div class="err" id="e" role="alert" aria-live="polite"></div>
+  <div class="hint">La clé se transmet hors-bande — si vous ne l'avez pas : victor@exoflow.fr</div>
+</form>
+<script>
+(function(){"use strict";
+var f=document.getElementById("f"),k=document.getElementById("k"),b=document.getElementById("b"),e=document.getElementById("e");
+function norm(s){return s.toUpperCase().replace(/[^A-Z0-9]/g,"")}
+async function unlock(pass,silent){
+  if(!pass){if(!silent)e.textContent="Saisissez la clé.";return}
+  b.disabled=true;e.textContent="Déchiffrement…";
+  try{
+    var buf=await (await fetch("seb.enc",{cache:"no-store"})).arrayBuffer();
+    var dv=new DataView(buf), magic=new TextDecoder().decode(buf.slice(0,8));
+    if(magic!=="EXOSEBv1") throw new Error("format");
+    var iter=dv.getUint32(8), salt=buf.slice(12,28), iv=buf.slice(28,40), ct=buf.slice(40);
+    var base=await crypto.subtle.importKey("raw",new TextEncoder().encode(pass),"PBKDF2",false,["deriveKey"]);
+    var key=await crypto.subtle.deriveKey({name:"PBKDF2",hash:"SHA-256",salt:salt,iterations:iter},base,{name:"AES-GCM",length:256},false,["decrypt"]);
+    var plain=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,ct);
+    try{sessionStorage.setItem("seb-k",pass)}catch(_){}
+    var ds=new DecompressionStream("gzip");
+    var html=await new Response(new Blob([plain]).stream().pipeThrough(ds)).text();
+    document.open();document.write(html);document.close();
+  }catch(err){
+    b.disabled=false;
+    if(silent){e.textContent=""}
+    else{e.textContent="Clé incorrecte — vérifiez et réessayez.";
+      f.classList.remove("shake");void f.offsetWidth;f.classList.add("shake")}
+  }
+}
+f.addEventListener("submit",function(ev){ev.preventDefault();unlock(norm(k.value),false)});
+var saved=null;try{saved=sessionStorage.getItem("seb-k")}catch(_){}
+if(saved){unlock(saved,true)}else{k.focus()}
+})();
+</script></body></html>
