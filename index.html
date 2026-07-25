@@ -31,7 +31,7 @@ button:disabled{opacity:.55;cursor:wait;transform:none}
   <div class="cob">EXOFLOW &times; GROUPE SEB</div>
   <h1>Proposition — encarts pilotés par IA</h1>
   <p>Document chiffré (AES-256-GCM). Saisissez la clé d'accès qui vous a été transmise.</p>
-  <input id="k" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX" aria-label="Clé d'accès">
+  <input id="k" autocomplete="off" spellcheck="false" autocapitalize="characters" enterkeyhint="go" placeholder="XXXX-XXXX-XXXX-XXXX" aria-label="Clé d'accès">
   <button id="b" type="submit">Déverrouiller</button>
   <div class="err" id="e" role="alert" aria-live="polite"></div>
   <div class="hint">La clé se transmet hors-bande — si vous ne l'avez pas : victor@exoflow.fr</div>
@@ -40,30 +40,56 @@ button:disabled{opacity:.55;cursor:wait;transform:none}
 (function(){"use strict";
 var f=document.getElementById("f"),k=document.getElementById("k"),b=document.getElementById("b"),e=document.getElementById("e");
 function norm(s){return s.toUpperCase().replace(/[^A-Z0-9]/g,"")}
+function bloque(msg){e.style.color="#ffb454";e.textContent=msg;b.disabled=true;k.disabled=true}
+// Un navigateur trop ancien ne doit JAMAIS être diagnostiqué « clé incorrecte » :
+// le lecteur retaperait sa clé indéfiniment. On le détecte avant toute saisie.
+function incompatible(){
+  if(!window.isSecureContext) return "Cette page doit être ouverte en HTTPS pour être déchiffrée.";
+  if(!(window.crypto&&crypto.subtle)) return "Votre navigateur ne fournit pas les fonctions de déchiffrement nécessaires.";
+  if(typeof DecompressionStream==="undefined") return "Votre navigateur est trop ancien pour ouvrir ce document (Safari 16.4+, Chrome/Edge 80+, Firefox 113+). Ouvrez le lien dans un autre navigateur, ou écrivez à victor@exoflow.fr.";
+  return null;
+}
+function echec(msg){
+  b.disabled=false;e.style.color="";e.textContent=msg;
+  f.classList.remove("shake");void f.offsetWidth;f.classList.add("shake");
+}
 async function unlock(pass,silent){
-  if(!pass){if(!silent)e.textContent="Saisissez la clé.";return}
-  b.disabled=true;e.textContent="Déchiffrement…";
+  if(!pass){if(!silent)echec("Saisissez la clé.");return}
+  b.disabled=true;e.style.color="";e.textContent="Déchiffrement…";
+  var buf;
   try{
-    var buf=await (await fetch("seb.enc",{cache:"no-store"})).arrayBuffer();
+    var rep=await fetch("seb.enc",{cache:"no-store"});
+    if(!rep.ok) throw new Error("http "+rep.status);
+    buf=await rep.arrayBuffer();
+  }catch(err){
+    b.disabled=false;e.textContent="";
+    if(!silent) echec("Document introuvable ou connexion interrompue — réessayez.");
+    return;
+  }
+  try{
     var dv=new DataView(buf), magic=new TextDecoder().decode(buf.slice(0,8));
     if(magic!=="EXOSEBv1") throw new Error("format");
     var iter=dv.getUint32(8), salt=buf.slice(12,28), iv=buf.slice(28,40), ct=buf.slice(40);
     var base=await crypto.subtle.importKey("raw",new TextEncoder().encode(pass),"PBKDF2",false,["deriveKey"]);
     var key=await crypto.subtle.deriveKey({name:"PBKDF2",hash:"SHA-256",salt:salt,iterations:iter},base,{name:"AES-GCM",length:256},false,["decrypt"]);
     var plain=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,ct);
-    try{sessionStorage.setItem("seb-k",pass)}catch(_){}
+    e.textContent="Ouverture…";
     var ds=new DecompressionStream("gzip");
     var html=await new Response(new Blob([plain]).stream().pipeThrough(ds)).text();
+    try{sessionStorage.setItem("seb-k",pass)}catch(_){}
     document.open();document.write(html);document.close();
   }catch(err){
-    b.disabled=false;
-    if(silent){e.textContent=""}
-    else{e.textContent="Clé incorrecte — vérifiez et réessayez.";
-      f.classList.remove("shake");void f.offsetWidth;f.classList.add("shake")}
+    e.textContent="";
+    if(!silent) echec("Clé incorrecte — vérifiez et réessayez.");
+    else b.disabled=false;
   }
 }
-f.addEventListener("submit",function(ev){ev.preventDefault();unlock(norm(k.value),false)});
-var saved=null;try{saved=sessionStorage.getItem("seb-k")}catch(_){}
-if(saved){unlock(saved,true)}else{k.focus()}
+var pb=incompatible();
+if(pb){ bloque(pb); }
+else{
+  f.addEventListener("submit",function(ev){ev.preventDefault();unlock(norm(k.value),false)});
+  var saved=null;try{saved=sessionStorage.getItem("seb-k")}catch(_){}
+  if(saved){unlock(saved,true)}else{k.focus()}
+}
 })();
 </script></body></html>
